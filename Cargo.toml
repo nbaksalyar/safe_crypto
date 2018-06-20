@@ -5,10 +5,16 @@ authors = ["MaidSafe Developers <dev@maidsafe.net>"]
 license = "MIT OR BSD-3-Clause"
 
 [dependencies]
+# ed25519-dalek = { version = "~0.6.2", features = ["serde"] }
+ed25519-dalek = { version = "~0.6.2", features = ["serde"], path = "../../rust/ed25519-dalek" }
+# x25519-dalek = "~0.2.0"
+x25519-dalek = { version = "~0.2.0", path = "../../rust/x25519-dalek" }
+miscreant = "~0.3.0"
 maidsafe_utilities = "~0.14.0"
+sha3 = "~0.7.3"
+rand = "~0.5.2"
 rust_sodium = "~0.9.0"
 serde = "~1.0.66"
 serde_derive = "~1.0.66"
 quick-error = "~1.2.2"
 unwrap = "~1.1.0"
-
