@@ -71,8 +71,14 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::fmt;
 use std::sync::Arc;
 
+/// Size of the initialisation vector.
+pub const IV_SIZE = box_::NONCEBYTES;
+
 /// Represents public signature key.
 pub type PublicSignKey = [u8; 32];
+
+/// Initialisation vector.
+pub type Iv = [u8; IV_SIZE];
 
 /// Initialise random number generator for the key generation functions.
 pub fn init() -> Result<(), ()> {
@@ -137,7 +143,7 @@ pub struct SharedSecretKey {
 
 #[derive(Serialize, Deserialize)]
 struct CipherText {
-    nonce: [u8; box_::NONCEBYTES],
+    nonce: Iv,
     ciphertext: Vec<u8>,
 }
 
@@ -364,6 +370,21 @@ impl SymmetricKey {
         self.encrypt_bytes(&serialise(plaintext)?)
     }
 
+    /// Encrypts bytestring `plaintext` using initialisation vector `iv`.
+    ///
+    /// Returns ciphertext in case of success.
+    pub fn encrypt_bytes_iv(
+        &self,
+        plaintext: &[u8],
+        iv: Iv,
+    ) -> Result<Vec<u8>, Error> {
+        Ok(secretbox::seal(
+            plaintext,
+            &secretbox::Nonce(iv),
+            &self.encrypt,
+        ))
+    }
+
     /// Encrypts bytestring `plaintext` using authenticated symmetric encryption.
     ///
     /// With authenticated encryption the recipient will be able to confirm that the message
@@ -373,7 +394,7 @@ impl SymmetricKey {
     /// Can return an `Error` in case of a serialisation error.
     pub fn encrypt_bytes(&self, plaintext: &[u8]) -> Result<Vec<u8>, Error> {
         let nonce = secretbox::gen_nonce();
-        let ciphertext = secretbox::seal(plaintext, &nonce, &self.encrypt);
+        let ciphertext = self.encrypt_bytes_iv(plaintext, nonce.0)?;
         Ok(serialise(&CipherText {
             nonce: nonce.0,
             ciphertext,
@@ -395,7 +416,21 @@ impl SymmetricKey {
         Ok(deserialise(&self.decrypt_bytes(ciphertext)?)?)
     }
 
+    /// Decrypts bytestring `ciphertext` using a provided initialisation vector `iv`.
+    pub fn decrypt_bytes_iv(
+        &self,
+        ciphertext: &[u8],
+        iv: Iv,
+    ) -> Result<Vec<u8>, Error> {
+        Ok(secretbox::open(
+            &ciphertext,
+            &secretbox::Nonce(iv),
+            &self.encrypt,
+        )?)
+    }
+
     /// Decrypts bytestring `ciphertext` encrypted using authenticated symmetric encryption.
+    /// This function uses the baked-in nonce as an initialisation vector.
     ///
     /// With authenticated encryption we will be able to tell that the message hasn't been
     /// tampered with.
@@ -405,11 +440,7 @@ impl SymmetricKey {
     /// is not valid, or if it can not be decrypted.
     pub fn decrypt_bytes(&self, ciphertext: &[u8]) -> Result<Vec<u8>, Error> {
         let CipherText { nonce, ciphertext } = deserialise(ciphertext)?;
-        Ok(secretbox::open(
-            &ciphertext,
-            &secretbox::Nonce(nonce),
-            &self.encrypt,
-        )?)
+        self.decrypt_bytes_iv(&ciphertext, nonce)
     }
 }
 
